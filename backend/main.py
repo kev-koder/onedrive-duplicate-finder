@@ -1,4 +1,6 @@
 import json
+import os
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -10,6 +12,8 @@ from database import SessionLocal, ScanSession, DuplicateGroup, GroupFile, File,
 import indexer
 import deleter
 import uvicorn
+
+ENV_PATH = Path(__file__).parent / ".env"
 
 app = FastAPI(title="OneDrive Duplicate Finder API")
 
@@ -36,6 +40,34 @@ def startup():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Setup endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/setup/status")
+def setup_status():
+    client_id = ""
+    if ENV_PATH.exists():
+        for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
+            if line.startswith("AZURE_CLIENT_ID="):
+                client_id = line.split("=", 1)[1].strip()
+                break
+    return {"configured": bool(client_id)}
+
+
+class SetupRequest(BaseModel):
+    client_id: str
+
+
+@app.post("/setup/configure")
+def setup_configure(req: SetupRequest):
+    client_id = req.client_id.strip()
+    if not client_id:
+        raise HTTPException(status_code=400, detail="Client ID cannot be empty.")
+    ENV_PATH.write_text(f"AZURE_CLIENT_ID={client_id}\n", encoding="utf-8")
+    return {"saved": True}
 
 
 @app.get("/me")
